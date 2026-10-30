@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Audio Binary Messenger</title>
+<style>
+:root{
+  --bg:#eef1f6;--card:#fff;--text:#161b26;--muted:#5b6579;--line:#d9dfea;--field:#f6f8fc;
+  --accent:#3347d6;--accent-t:#fff;--t0:#0e8f86;--t1:#d27a0a;--ok:#14803c;--busy:#b86a00;--err:#c4262e;
+  box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){color-scheme:dark;--bg:#10141c;--card:#181e29;--text:#e8ecf4;--muted:#93a0b8;--line:#2a3345;--field:#121722;
+  --accent:#7d8dff;--accent-t:#0d1020;--t0:#3fd1c4;--t1:#f2a63b;--ok:#4ade80;--busy:#f2b24d;--err:#ff7b7f;}
+}
+:root[data-theme="dark"]{color-scheme:dark;--bg:#10141c;--card:#181e29;--text:#e8ecf4;--muted:#93a0b8;--line:#2a3345;--field:#121722;
+  --accent:#7d8dff;--accent-t:#0d1020;--t0:#3fd1c4;--t1:#f2a63b;--ok:#4ade80;--busy:#f2b24d;--err:#ff7b7f;}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.wrap{max-width:1000px;margin:0 auto;padding:24px 16px 40px}
+h1{font-size:1.7rem;margin:0 0 4px;letter-spacing:-.01em}
+.sub{color:var(--muted);margin:0 0 20px;max-width:62ch}
+.legend b{font-family:ui-monospace,Menlo,Consolas,monospace}
+.legend .z{color:var(--t0)}.legend .o{color:var(--t1)}
+.grid{display:grid;gap:16px;grid-template-columns:1fr}
+@media(min-width:860px){.grid{grid-template-columns:1fr 1fr}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px;min-width:0}
+.card h2{margin:0 0 14px;font-size:1.15rem;display:flex;justify-content:space-between;align-items:center;gap:8px}
+.pill{font-size:.8rem;font-weight:600;padding:3px 10px;border-radius:99px;border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+.pill.ok{color:var(--ok);border-color:var(--ok)}.pill.busy{color:var(--busy);border-color:var(--busy)}.pill.err{color:var(--err);border-color:var(--err)}
+input[type=text]{width:100%;font:inherit;padding:14px;border-radius:10px;border:1px solid var(--line);background:var(--field);color:var(--text)}
+input:focus-visible,button:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.hint{font-size:.85rem;color:var(--muted);margin:8px 0 14px}
+.btns{display:flex;gap:10px;flex-wrap:wrap}
+button{font:inherit;font-weight:700;letter-spacing:.02em;border:0;border-radius:12px;padding:16px 22px;min-height:56px;flex:1 1 160px;cursor:pointer;background:var(--accent);color:var(--accent-t)}
+button.alt{background:transparent;color:var(--text);border:1.5px solid var(--line)}
+button:disabled{opacity:.4;cursor:not-allowed}
+.bar{height:12px;background:var(--field);border:1px solid var(--line);border-radius:99px;overflow:hidden;margin:16px 0 8px}
+.bar>i{display:block;height:100%;width:0;background:var(--accent);transition:width .08s linear}
+.meter>i{background:linear-gradient(90deg,var(--t0),var(--t1))}
+.row{display:flex;justify-content:space-between;gap:10px;font-size:.9rem;color:var(--muted);flex-wrap:wrap}
+.tone{font-family:ui-monospace,Menlo,Consolas,monospace;font-weight:700}
+.tone.b0{color:var(--t0)}.tone.b1{color:var(--t1)}
+.bits{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.8rem;color:var(--muted);word-break:break-all;max-height:5.2em;overflow:auto;margin-top:10px}
+.msg{background:var(--field);border:1px solid var(--line);border-radius:10px;padding:14px;min-height:84px;margin-top:14px;font-size:1.15rem;white-space:pre-wrap;word-break:break-word}
+.msg.empty{color:var(--muted);font-size:.95rem}
+.err-box{display:none;margin-top:12px;padding:10px 12px;border-radius:10px;border:1px solid var(--err);color:var(--err);font-size:.9rem}
+.log{list-style:none;padding:0;margin:10px 0 0;font-size:.85rem;color:var(--muted);max-height:140px;overflow:auto}
+.log li{padding:4px 0;border-top:1px solid var(--line)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Audio Binary Messenger</h1>
+  <p class="sub legend">Send text between two devices using only sound. Each bit is a tone for 150 ms:
+    <b class="z">0 = 1000 Hz</b>, <b class="o">1 = 2000 Hz</b>. Use medium volume, a quiet room, and devices 10–50 cm apart.</p>
+  <main class="grid">
+    <!-- SEND -->
+    <section class="card" aria-labelledby="sh">
+      <h2 id="sh">SEND <span class="pill" id="txPill">Idle</span></h2>
+      <input type="text" id="msgIn" placeholder="Type a message…" maxlength="120" autocomplete="off" aria-label="Message to send">
+      <p class="hint" id="txInfo">Up to 120 bytes. Longer messages take longer to play.</p>
+      <div class="btns"><button id="sendBtn">SEND</button><button id="cancelBtn" class="alt" disabled>CANCEL</button></div>
+      <div class="bar" aria-hidden="true"><i id="txBar"></i></div>
+      <div class="row"><span id="txStage">Ready</span><span class="tone" id="txTone">—</span></div>
+      <div class="bits" id="txBits"></div>
+      <div class="err-box" id="txErr" role="alert"></div>
+    </section>
+    <!-- LISTEN -->
+    <section class="card" aria-labelledby="lh">
+      <h2 id="lh">LISTEN <span class="pill" id="rxPill">Stopped</span></h2>
+      <div class="btns"><button id="startBtn">START LISTENING</button><button id="stopBtn" class="alt" disabled>STOP LISTENING</button></div>
+      <div class="bar meter" aria-hidden="true"><i id="lvl"></i></div>
+      <div class="row"><span id="rxStage">Microphone off</span><span class="tone" id="rxTone">—</span></div>
+      <div class="msg empty" id="rxMsg" aria-live="polite">Received messages appear here.</div>
+      <ul class="log" id="rxLog"></ul>
+      <div class="err-box" id="rxErr" role="alert"></div>
+    </section>
+  </main>
+  <p class="hint">Test on one device: press START LISTENING, then SEND — the microphone will pick up the speaker.</p>
+</div>
+
+<script>
+"use strict";
+(() => {
+/* ====================== PROTOCOL ======================
+ Frame (bits, MSB first):
+   PREAMBLE 16 bits alternating 1010…  (wakes mic, gives clear tone transitions)
+   START    16-bit sync word
+   LENGTH   8 bits (payload bytes)
+   PAYLOAD  UTF-8 bytes
+   CRC16    CCITT over [length, payload]
+   END      16-bit sync word
+ Each bit = one tone: 0 -> 1000 Hz, 1 -> 2000 Hz, 150 ms. Phase-continuous 2-FSK. */
+const F0 = 1000, F1 = 2000, BIT_MS = 150, PREAMBLE_BITS = 16;
+const START_WORD = 0xE9CB, END_WORD = 0x1634, MAX_BYTES = 120;
+
+const $ = id => document.getElementById(id);
+const byteBits = b => { const a = []; for (let i = 7; i >= 0; i--) a.push((b >> i) & 1); return a; };
+const wordBits = w => { const a = []; for (let i = 15; i >= 0; i--) a.push((w >> i) & 1); return a; };
+function crc16(bytes) {
+  let c = 0xFFFF;
+  for (const b of bytes) { c ^= b << 8; for (let i = 0; i < 8; i++) c = (c & 0x8000) ? ((c << 1) ^ 0x1021) & 0xFFFF : (c << 1) & 0xFFFF; }
+  return c;
+}
+function setPill(el, text, kind) { el.textContent = text; el.className = "pill" + (kind ? " " + kind : ""); }
+function showErr(el, text) { el.textContent = text || ""; el.style.display = text ? "block" : "none"; }
+
+function buildFrame(text) {
+  const payload = new TextEncoder().encode(text);
+  if (!payload.length) throw new Error("Type a message first.");
+  if (payload.length > MAX_BYTES) throw new Error("Message is too long (max " + MAX_BYTES + " bytes in UTF-8).");
+  const crc = crc16([payload.length, ...payload]);
+  const parts = [
+    ["Preamble", Array.from({ length: PREAMBLE_BITS }, (_, i) => (i + 1) & 1)],
+    ["Start sync", wordBits(START_WORD)],
+    ["Length", byteBits(payload.length)],
+    ["Data", [].concat(...Array.from(payload, byteBits))],
+    ["Checksum", wordBits(crc)],
+    ["End sync", wordBits(END_WORD)],
+  ];
+  const bits = [], segs = [];
+  for (const [name, b] of parts) { segs.push({ name, from: bits.length, to: bits.length + b.length }); bits.push(...b); }
+  return { bits, segs };
+}
+
+/* ====================== AUDIO CONTEXT ====================== */
+let ctx = null;
+function getCtx() {
+  if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+  return ctx;
+}
+
+/* ====================== SEND ====================== */
+const msgIn = $("msgIn"), sendBtn = $("sendBtn"), cancelBtn = $("cancelBtn");
+let tx = null;
+
+msgIn.addEventListener("input", () => {
+  const n = new TextEncoder().encode(msgIn.value).length;
+  const secs = n ? ((n * 8 + PREAMBLE_BITS + 56) * BIT_MS / 1000).toFixed(1) : 0;
+  $("txInfo").textContent = n ? n + " bytes · about " + secs + " s to transmit" : "Up to 120 bytes. Longer messages take longer to play.";
+});
+msgIn.addEventListener("keydown", e => { if (e.key === "Enter") sendBtn.click(); });
+
+sendBtn.addEventListener("click", async () => {
+  showErr($("txErr"), "");
+  let frame;
+  try { frame = buildFrame(msgIn.value); } catch (e) { showErr($("txErr"), e.message); return; }
+  try {
+    const c = getCtx(); await c.resume();
+    const B = BIT_MS / 1000, t0 = c.currentTime + 0.3, tEnd = t0 + frame.bits.length * B;
+    const osc = c.createOscillator(), gain = c.createGain();
+    osc.type = "sine";
+    // One oscillator, frequency scheduled on the audio clock: exact timing, phase-continuous (no clicks).
+    frame.bits.forEach((b, i) => osc.frequency.setValueAtTime(b ? F1 : F0, t0 + i * B));
+    gain.gain.setValueAtTime(0, c.currentTime);
+    gain.gain.linearRampToValueAtTime(0.6, t0 + 0.02);
+    gain.gain.setValueAtTime(0.6, tEnd - 0.02);
+    gain.gain.linearRampToValueAtTime(0, tEnd);
+    osc.connect(gain); gain.connect(c.destination);
+    osc.start(); osc.stop(tEnd + 0.05);
+    tx = { osc, gain, frame, t0, B, tEnd, c };
+    osc.onended = () => finishTx(!tx || !tx.cancelled);
+    sendBtn.disabled = true; cancelBtn.disabled = false; msgIn.disabled = true;
+    setPill($("txPill"), "Transmitting", "busy");
+    $("txBits").textContent = frame.bits.join("").replace(/(.{8})/g, "$1 ");
+    requestAnimationFrame(txTick);
+  } catch (e) { showErr($("txErr"), "Audio output failed: " + e.message); }
+});
+cancelBtn.addEventListener("click", () => {
+  if (!tx) return;
+  tx.cancelled = true;
+  try { tx.gain.gain.cancelScheduledValues(0); tx.gain.gain.setValueAtTime(0, tx.c.currentTime); tx.osc.stop(); } catch (_) {}
+});
+function txTick() {
+  if (!tx) return;
+  const el = tx.c.currentTime - tx.t0, i = Math.floor(el / tx.B);
+  if (el < 0) { $("txStage").textContent = "Starting…"; }
+  else if (i < tx.frame.bits.length) {
+    const seg = tx.frame.segs.find(s => i >= s.from && i < s.to), b = tx.frame.bits[i];
+    $("txBar").style.width = (100 * i / tx.frame.bits.length).toFixed(1) + "%";
+    $("txStage").textContent = seg.name + " · bit " + (i + 1) + " of " + tx.frame.bits.length;
+    const t = $("txTone"); t.textContent = b + " · " + (b ? F1 : F0) + " Hz"; t.className = "tone b" + b;
+  }
+  requestAnimationFrame(txTick);
+}
+function finishTx(ok) {
+  tx = null;
+  $("txBar").style.width = ok ? "100%" : "0%";
+  $("txStage").textContent = ok ? "Transmission complete" : "Cancelled";
+  $("txTone").textContent = "—"; $("txTone").className = "tone";
+  setPill($("txPill"), ok ? "Sent" : "Cancelled", ok ? "ok" : "");
+  sendBtn.disabled = false; cancelBtn.disabled = true; msgIn.disabled = false;
+}
+
+/* ====================== FFT ====================== */
+const N = 4096, HOP = 512;                 // window ≈ 85 ms at 48 kHz (shorter than one bit), hop ≈ 10.7 ms
+const hann = new Float32Array(N), rev = new Uint16Array(N), cosT = new Float32Array(N / 2), sinT = new Float32Array(N / 2);
+for (let i = 0; i < N; i++) { hann[i] = 0.5 - 0.5 * Math.cos(2 * Math.PI * i / (N - 1)); rev[i] = (rev[i >> 1] >> 1) | ((i & 1) << 11); }
+for (let k = 0; k < N / 2; k++) { cosT[k] = Math.cos(2 * Math.PI * k / N); sinT[k] = -Math.sin(2 * Math.PI * k / N); }
+const re = new Float32Array(N), im = new Float32Array(N), fr = new Float32Array(N);
+function fft() {                            // in-place radix-2 FFT on re/im
+  for (let i = 0; i < N; i++) { const j = rev[i]; if (j > i) { let t = re[i]; re[i] = re[j]; re[j] = t; t = im[i]; im[i] = im[j]; im[j] = t; } }
+  for (let size = 2; size <= N; size <<= 1) {
+    const half = size >> 1, step = N / size;
+    for (let i = 0; i < N; i += size) for (let j = 0, k = 0; j < half; j++, k += step) {
+      const a = i + j, b = a + half, wr = cosT[k], wi = sinT[k];
+      const tr = re[b] * wr - im[b] * wi, ti = re[b] * wi + im[b] * wr;
+      re[b] = re[a] - tr; im[b] = im[a] - ti; re[a] += tr; im[a] += ti;
+    }
+  }
+}
+
+/* ====================== RECEIVE ====================== */
+let stream = null, src = null, proc = null, mute = null, sr = 48000, binW = sr / N, bitHops = 0;
+const RING = 16384, PRE_HOPS = 45, TRY_EVERY = 190, MAX_SERIES = 94 * 300;
+let rx = null;
+function newRx() {
+  return { ring: new Float32Array(RING), total: 0, nextEnd: N, mode: "idle", pre: [], series: [], run: 0, quiet: 0, activeHops: 0, delivered: false, lastTry: 0 };
+}
+
+// FFT analysis of one window: soft symbol s = ln(|2000 Hz| / |1000 Hz|), plus level and tonality.
+function analyze() {
+  for (let i = 0; i < N; i++) { re[i] = fr[i] * hann[i]; im[i] = 0; }
+  fft();
+  const scale = 4 / N, mag = k => Math.hypot(re[k], im[k]);
+  const peak = f => { const b = Math.round(f / binW); let m = 0; for (let k = b - 2; k <= b + 2; k++) m = Math.max(m, mag(k)); return m * scale; };
+  const m0 = peak(F0), m1 = peak(F1);
+  let sum = 0, cnt = 0;
+  for (let k = Math.round(1300 / binW); k <= Math.round(1700 / binW); k++) { sum += mag(k); cnt++; }
+  const noise = sum / cnt * scale, level = Math.max(m0, m1);
+  return { s: Math.log((m1 + 1e-6) / (m0 + 1e-6)), level, active: level > 0.0015 && level > 4 * noise };
+}
+
+function pushSamples(inp) {
+  for (let i = 0; i < inp.length; i++) rx.ring[(rx.total + i) & (RING - 1)] = inp[i];
+  rx.total += inp.length;
+  while (rx.total >= rx.nextEnd) {
+    for (let i = 0; i < N; i++) fr[i] = rx.ring[(rx.nextEnd - N + i) & (RING - 1)];
+    rx.nextEnd += HOP;
+    step(analyze());
+  }
+}
+
+function step(h) {
+  // Audio activity indicator
+  const db = 20 * Math.log10(h.level + 1e-9);
+  $("lvl").style.width = Math.max(0, Math.min(100, (db + 70) / 60 * 100)) + "%";
+  const t = $("rxTone");
+  if (h.active) { const b = h.s > 0 ? 1 : 0; t.textContent = b + " · " + (b ? F1 : F0) + " Hz"; t.className = "tone b" + b; }
+  else { t.textContent = "—"; t.className = "tone"; }
+
+  if (rx.mode === "idle") {
+    rx.pre.push(h.s); if (rx.pre.length > PRE_HOPS) rx.pre.shift();
+    rx.run = h.active ? rx.run + 1 : 0;
+    if (rx.run >= 4) {                       // tone burst detected: start recording (with a little pre-roll)
+      rx.mode = "rec"; rx.series = rx.pre.slice(); rx.quiet = 0; rx.activeHops = rx.run; rx.delivered = false; rx.lastTry = rx.series.length;
+      setPill($("rxPill"), "Receiving", "busy");
+    }
+    return;
+  }
+  rx.series.push(h.s);
+  if (h.active) { rx.quiet = 0; rx.activeHops++; } else rx.quiet++;
+  $("rxStage").textContent = (rx.delivered ? "Message received, waiting for silence…" : "Receiving signal · " + (rx.activeHops * HOP / sr).toFixed(1) + " s");
+  if (!rx.delivered && rx.series.length - rx.lastTry >= TRY_EVERY) {      // try decoding every ~2 s
+    rx.lastTry = rx.series.length;
+    const r = decodeSeries(rx.series); if (r && r.endOk) deliver(r);
+  }
+  if (rx.quiet >= 65 || rx.series.length > MAX_SERIES) endBurst();       // ~0.7 s of silence = end of burst
+}
+
+function endBurst() {
+  const s = rx.series.slice(0, Math.max(0, rx.series.length - Math.max(0, rx.quiet - 2)));
+  if (!rx.delivered) {
+    if (rx.activeHops * HOP / sr < 1.5) { /* short noise burst: ignore */ }
+    else {
+      const r = decodeSeries(s);
+      if (r) deliver(r);
+      else { showErr($("rxErr"), "A signal was heard but could not be decoded (sync or checksum failed). Move the devices closer, adjust the volume, and send again."); setPill($("rxPill"), "Decode failed", "err"); }
+    }
+  }
+  rx.mode = "idle"; rx.pre = []; rx.series = []; rx.run = 0;
+  if (stream) { $("rxStage").textContent = "Listening…"; if (!$("rxPill").classList.contains("err") && !$("rxPill").classList.contains("ok")) setPill($("rxPill"), "Listening", "ok"); }
+}
+
+/* ---- Bit recovery: sweep sampling phase & threshold, scan for START sync, validate CRC ---- */
+const ham = (bits, p, w) => { let d = 0; for (let i = 0; i < 16; i++) if (bits[p + i] !== ((w >> (15 - i)) & 1)) d++; return d; };
+function parseAt(bits, p) {
+  if (p + 8 > bits.length) return null;
+  let len = 0; for (let i = 0; i < 8; i++) len = (len << 1) | bits[p + i];
+  if (len < 1 || len > MAX_BYTES) return null;
+  const need = 8 + len * 8 + 16;
+  if (p + need > bits.length) return null;
+  const bytes = [];
+  for (let k = 0; k < len; k++) { let v = 0; for (let i = 0; i < 8; i++) v = (v << 1) | bits[p + 8 + k * 8 + i]; bytes.push(v); }
+  let crc = 0; for (let i = 0; i < 16; i++) crc = (crc << 1) | bits[p + 8 + len * 8 + i];
+  if (crc16([len, ...bytes]) !== crc) return null;
+  let text; try { text = new TextDecoder("utf-8", { fatal: true }).decode(Uint8Array.from(bytes)); } catch (_) { return null; }
+  const e = p + need;
+  return { text, bytes: len, endOk: e + 16 <= bits.length && ham(bits, e, END_WORD) <= 3 };
+}
+function decodeSeries(S) {
+  const n = S.length;
+  if (n < bitHops * 50) return null;
+  const sorted = Float32Array.from(S).sort(), p10 = sorted[Math.floor(n * .1)], p90 = sorted[Math.floor(n * .9)];
+  if (p90 - p10 < 1) return null;           // both tones must be present
+  const mid = (p10 + p90) / 2;
+  for (const off of [0, -0.8, 0.8]) {
+    for (let ph = 0; ph < bitHops; ph += 0.5) {
+      const bits = [];
+      for (let k = 0; ; k++) {              // sample each bit at its centre (window fully inside the bit)
+        const i = Math.round(ph + (k + 0.5) * bitHops);
+        if (i + 1 >= n) break;
+        bits.push((S[i - 1] + S[i] + S[i + 1]) / 3 > mid + off ? 1 : 0);
+      }
+      for (let p = 0; p + 16 <= bits.length; p++) {
+        if (ham(bits, p, START_WORD) <= 2) { const r = parseAt(bits, p + 16); if (r) return r; }
+      }
+    }
+  }
+  return null;
+}
+
+function deliver(r) {
+  rx.delivered = true;
+  showErr($("rxErr"), "");
+  const box = $("rxMsg"); box.textContent = r.text; box.classList.remove("empty");
+  const li = document.createElement("li");
+  li.textContent = new Date().toLocaleTimeString() + " · " + r.bytes + " bytes · checksum OK" + (r.endOk ? " · end sync OK" : "") + " · " + r.text;
+  $("rxLog").prepend(li);
+  setPill($("rxPill"), "Message received", "ok");
+}
+
+/* ---- Microphone control ---- */
+$("startBtn").addEventListener("click", async () => {
+  showErr($("rxErr"), "");
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    showErr($("rxErr"), "Microphone access needs a secure context. Open this page over HTTPS or from localhost."); return;
+  }
+  try {
+    // Echo cancellation, noise suppression and AGC would destroy the tones, so turn them off.
+    stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 } });
+  } catch (e) {
+    const m = { NotAllowedError: "Microphone permission was denied. Allow microphone access in the browser’s site settings, then try again.",
+      NotFoundError: "No microphone was found on this device.", NotReadableError: "The microphone is in use by another application." };
+    showErr($("rxErr"), m[e.name] || ("Could not open the microphone: " + e.message)); setPill($("rxPill"), "Error", "err"); return;
+  }
+  try {
+    const c = getCtx(); await c.resume();
+    sr = c.sampleRate; binW = sr / N; bitHops = sr * BIT_MS / 1000 / HOP;
+    rx = newRx();
+    src = c.createMediaStreamSource(stream);
+    proc = c.createScriptProcessor(2048, 1, 1);
+    mute = c.createGain(); mute.gain.value = 0;          // keeps the processor running without feedback
+    src.connect(proc); proc.connect(mute); mute.connect(c.destination);
+    proc.onaudioprocess = e => { if (rx) pushSamples(e.inputBuffer.getChannelData(0)); };
+    $("startBtn").disabled = true; $("stopBtn").disabled = false;
+    $("rxStage").textContent = "Listening…"; setPill($("rxPill"), "Listening", "ok");
+  } catch (e) { showErr($("rxErr"), "Audio processing failed: " + e.message); stopListening(); }
+});
+function stopListening() {
+  if (proc) { proc.onaudioprocess = null; try { proc.disconnect(); src.disconnect(); mute.disconnect(); } catch (_) {} }
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  stream = src = proc = mute = rx = null;
+  $("startBtn").disabled = false; $("stopBtn").disabled = true;
+  $("lvl").style.width = "0%"; $("rxTone").textContent = "—"; $("rxTone").className = "tone";
+  $("rxStage").textContent = "Microphone off"; setPill($("rxPill"), "Stopped", "");
+}
+$("stopBtn").addEventListener("click", stopListening);
+})();
+</script>
+</body>
+</html>
+
+<!-- Injection By NetFree -->
+<script src="//netfree.link/injection-script/go-payment.js" type="text/javascript" async ></script>
+<script src="//netfree.link/injection-script/popup-card-init.js" type="text/javascript" async ></script>
