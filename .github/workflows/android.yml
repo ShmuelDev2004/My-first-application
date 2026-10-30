@@ -1,3 +1,4 @@
+
 name: Build Android APK
 
 on:
@@ -15,21 +16,28 @@ jobs:
         uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: 17
+          java-version: '17'
 
-           - name: Setup Android SDK
+      - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install Android SDK packages
+      - name: Install Android packages
         run: |
-          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platform-tools" "platforms;android-35" "build-tools;35.0.0"
-      - name: Create Android Project
+          sdkmanager --install "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+          yes | sdkmanager --licenses
+
+      - name: Prepare Android project
         run: |
           mkdir -p app/src/main/assets
           mkdir -p app/src/main/java/com/example/myapp
 
-          cp *.html app/src/main/assets/index.html
+          HTML=$(find . -maxdepth 1 -name '*.html' | head -n 1)
+          if [ -z "$HTML" ]; then
+            echo "HTML file not found"
+            exit 1
+          fi
+
+          cp "$HTML" app/src/main/assets/index.html
 
           cat > settings.gradle <<'EOF'
           pluginManagement {
@@ -46,14 +54,12 @@ jobs:
               }
           }
           rootProject.name = "MyApp"
-          include ":app"
+          include ':app'
           EOF
 
-          cat > build.gradle <<'EOF'
-          plugins {
+          echo "plugins {
               id 'com.android.application' version '8.6.1' apply false
-          }
-          EOF
+          }" > build.gradle
 
           cat > app/build.gradle <<'EOF'
           plugins {
@@ -76,9 +82,12 @@ jobs:
 
           cat > app/src/main/AndroidManifest.xml <<'EOF'
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-              <application android:theme="@android:style/Theme.Material.Light.NoActionBar"
+              <application
+                  android:theme="@android:style/Theme.Material.Light.NoActionBar"
                   android:label="My App">
-                  <activity android:name=".MainActivity" android:exported="true">
+                  <activity
+                      android:name=".MainActivity"
+                      android:exported="true">
                       <intent-filter>
                           <action android:name="android.intent.action.MAIN"/>
                           <category android:name="android.intent.category.LAUNCHER"/>
@@ -90,6 +99,7 @@ jobs:
 
           cat > app/src/main/java/com/example/myapp/MainActivity.java <<'EOF'
           package com.example.myapp;
+
           import android.app.Activity;
           import android.os.Bundle;
           import android.webkit.WebView;
@@ -110,9 +120,9 @@ jobs:
 
       - name: Build APK
         run: |
-          gradle wrapper --gradle-version 8.7
-          chmod +x gradlew
-          ./gradlew assembleDebug
+          curl -L https://services.gradle.org/distributions/gradle-8.7-bin.zip -o gradle.zip
+          unzip -q gradle.zip
+          gradle-8.7/bin/gradle assembleDebug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
