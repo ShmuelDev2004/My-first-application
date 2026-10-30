@@ -12,66 +12,71 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 17
 
-      - name: Setup Android
-        uses: android-actions/setup-android@v3
+      - name: Install Android SDK
+        run: |
+          yes | sdkmanager --licenses
+          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
 
-      - name: Create Android project
+      - name: Create Android Project
         run: |
           mkdir -p app/src/main/assets
           mkdir -p app/src/main/java/com/example/myapp
 
           cp *.html app/src/main/assets/index.html
 
-          echo 'plugins {
-              id "com.android.application" version "8.6.1"
-          }
-
-          android {
-              namespace "com.example.myapp"
-              compileSdk 35
-
-              defaultConfig {
-                  applicationId "com.example.myapp"
-                  minSdk 23
-                  targetSdk 35
-                  versionCode 1
-                  versionName "1.0"
-              }
-          }' > app/build.gradle
-
-          echo 'pluginManagement {
+          cat > settings.gradle <<'EOF'
+          pluginManagement {
               repositories {
                   google()
                   mavenCentral()
                   gradlePluginPortal()
               }
           }
-
           dependencyResolutionManagement {
-              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
               repositories {
                   google()
                   mavenCentral()
               }
           }
-
           rootProject.name = "MyApp"
-          include ":app"' > settings.gradle
+          include ":app"
+          EOF
 
-          echo 'org.gradle.jvmargs=-Xmx2048m' > gradle.properties
+          cat > build.gradle <<'EOF'
+          plugins {
+              id 'com.android.application' version '8.6.1' apply false
+          }
+          EOF
 
-          mkdir -p app/src/main
+          cat > app/build.gradle <<'EOF'
+          plugins {
+              id 'com.android.application'
+          }
+
+          android {
+              namespace 'com.example.myapp'
+              compileSdk 35
+
+              defaultConfig {
+                  applicationId 'com.example.myapp'
+                  minSdk 23
+                  targetSdk 35
+                  versionCode 1
+                  versionName '1.0'
+              }
+          }
+          EOF
+
           cat > app/src/main/AndroidManifest.xml <<'EOF'
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
               <application android:theme="@android:style/Theme.Material.Light.NoActionBar"
                   android:label="My App">
-                  <activity android:name=".MainActivity"
-                      android:exported="true">
+                  <activity android:name=".MainActivity" android:exported="true">
                       <intent-filter>
                           <action android:name="android.intent.action.MAIN"/>
                           <category android:name="android.intent.category.LAUNCHER"/>
@@ -87,7 +92,9 @@ jobs:
           import android.os.Bundle;
           import android.webkit.WebView;
           import android.webkit.WebViewClient;
+
           public class MainActivity extends Activity {
+              @Override
               public void onCreate(Bundle b) {
                   super.onCreate(b);
                   WebView w = new WebView(this);
@@ -110,4 +117,3 @@ jobs:
         with:
           name: MyApp-APK
           path: app/build/outputs/apk/debug/app-debug.apk
-          
