@@ -17,11 +17,13 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - name: Install Android SDK
-        run: |
-          yes | sdkmanager --licenses
-          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+           - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
 
+      - name: Install Android SDK packages
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platform-tools" "platforms;android-35" "build-tools;35.0.0"
       - name: Create Android Project
         run: |
           mkdir -p app/src/main/assets
